@@ -168,22 +168,22 @@ altintegration::PopData getPopData() EXCLUSIVE_LOCKS_REQUIRED(cs_main)
     return GetPop().mempool->getPop();
 }
 
-PoPRewards getPopRewards(const CBlockIndex& pindexPrev, const Consensus::Params& consensusParams) EXCLUSIVE_LOCKS_REQUIRED(cs_main)
+PoPRewards getPopRewards(const CBlockIndex& tip, const Consensus::Params& consensusParams) EXCLUSIVE_LOCKS_REQUIRED(cs_main)
 {
     const auto& pop = GetPop();
     AssertLockHeld(cs_main);
-    altintegration::ValidationState state;
+    /*altintegration::ValidationState state;
     bool ret = pop.altTree->setState(pindexPrev.GetBlockHash().asVector(), state);
     (void)ret;
-    assert(ret);
+    assert(ret);*/
 
     auto& cfg = *pop.config;
-    if ((pindexPrev.nHeight + 1) < (int)cfg.alt->getEndorsementSettlementInterval()) {
+    if ((tip.nHeight + 1) < (int)cfg.alt->getEndorsementSettlementInterval()) {
         return {};
     }
-    auto blockHash = pindexPrev.GetBlockHash();
+    auto blockHash = tip.GetBlockHash();
     auto rewards = pop.altTree->getPopPayout(blockHash.asVector());
-    int halvings = (pindexPrev.nHeight + 1) / consensusParams.nSubsidyHalvingInterval;
+    int halvings = (tip.nHeight + 1) / consensusParams.nSubsidyHalvingInterval;
     PoPRewards btcRewards{};
     auto& param = Params();
     //erase rewards, that pay 0 satoshis and halve rewards
@@ -199,10 +199,10 @@ PoPRewards getPopRewards(const CBlockIndex& pindexPrev, const Consensus::Params&
     return btcRewards;
 }
 
-void addPopPayoutsIntoCoinbaseTx(CMutableTransaction& coinbaseTx, const CBlockIndex& pindexPrev, const Consensus::Params& consensusParams) EXCLUSIVE_LOCKS_REQUIRED(cs_main)
+void addPopPayoutsIntoCoinbaseTx(CMutableTransaction& coinbaseTx, const CBlockIndex& tip, const Consensus::Params& consensusParams) EXCLUSIVE_LOCKS_REQUIRED(cs_main)
 {
     AssertLockHeld(cs_main);
-    PoPRewards rewards = getPopRewards(pindexPrev, consensusParams);
+    PoPRewards rewards = getPopRewards(tip, consensusParams);
     assert(coinbaseTx.vout.size() == 1 && "at this place we should have only PoW payout here");
     for (const auto& itr : rewards) {
         CTxOut out;
@@ -212,10 +212,10 @@ void addPopPayoutsIntoCoinbaseTx(CMutableTransaction& coinbaseTx, const CBlockIn
     }
 }
 
-bool checkCoinbaseTxWithPopRewards(const CTransaction& tx, const CAmount& PoWBlockReward, const CBlockIndex& pindexPrev, const Consensus::Params& consensusParams, BlockValidationState& state) EXCLUSIVE_LOCKS_REQUIRED(cs_main)
+bool checkCoinbaseTxWithPopRewards(const CTransaction& tx, const CAmount& PoWBlockReward, const CBlockIndex& tip, const Consensus::Params& consensusParams, BlockValidationState& state) EXCLUSIVE_LOCKS_REQUIRED(cs_main)
 {
     AssertLockHeld(cs_main);
-    PoPRewards rewards = getPopRewards(pindexPrev, consensusParams);
+    PoPRewards rewards = getPopRewards(tip, consensusParams);
     CAmount nTotalPopReward = 0;
 
     if (tx.vout.size() < rewards.size()) {
