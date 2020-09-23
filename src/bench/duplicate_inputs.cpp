@@ -1,4 +1,6 @@
 // Copyright (c) 2011-2019 The Bitcoin Core developers
+// Copyright (c) 2019-2020 Xenios SEZC
+// https://www.veriblock.org
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -55,7 +57,7 @@ static void DuplicateInputs(benchmark::State& state)
 
     while (state.KeepRunning()) {
         BlockValidationState cvstate{};
-        assert(!CheckBlock(block, cvstate, chainparams.GetConsensus(), false, false));
+        assert(!CheckBlock(block, cvstate, chainparams.GetConsensus(), false));
         assert(cvstate.GetRejectReason() == "bad-txns-inputs-duplicate");
     }
 }

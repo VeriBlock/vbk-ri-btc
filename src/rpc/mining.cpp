@@ -1,5 +1,7 @@
 // Copyright (c) 2010 Satoshi Nakamoto
 // Copyright (c) 2009-2018 The Bitcoin Core developers
+// Copyright (c) 2019-2020 Xenios SEZC
+// https://www.veriblock.org
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -33,6 +35,9 @@
 #include <validationinterface.h>
 #include <versionbitsinfo.h>
 #include <warnings.h>
+
+#include <vbk/pop_service.hpp>
+#include <vbk/merkle.hpp>
 
 #include <memory>
 #include <stdint.h>
@@ -259,7 +264,7 @@ static UniValue getmininginfo(const JSONRPCRequest& request)
 }
 
 
-// NOTE: Unlike wallet RPC (which use BTC values), mining RPCs follow GBT (BIP 22) in using satoshi amounts
+// NOTE: Unlike wallet RPC (which use vBTC values), mining RPCs follow GBT (BIP 22) in using satoshi amounts
 static UniValue prioritisetransaction(const JSONRPCRequest& request)
 {
             RPCHelpMan{"prioritisetransaction",
@@ -392,6 +397,9 @@ static UniValue getblocktemplate(const JSONRPCRequest& request)
             "  \"curtime\" : ttt,                  (numeric) current timestamp in " + UNIX_EPOCH_TIME + "\n"
             "  \"bits\" : \"xxxxxxxx\",              (string) compressed target of next block\n"
             "  \"height\" : n                      (numeric) The height of the next block\n"
+            "  \"default_witness_commitment\" : \"xxxx\" (string) coinbase witness commitment \n"
+            "  \"keystone_hashes\" : [ \"keystone_hash1\" ...]  (array of strings) keystone hashes for the block (VERIBLOCK SECURITY)\n"
+            "  \"pop_witness_commitment\" : \"xxxx\"   (string) coinbase pop witness commitmnet (VERIBLOCK SECURITY)\n"
             "}\n"
                 },
                 RPCExamples{
@@ -470,8 +478,9 @@ static UniValue getblocktemplate(const JSONRPCRequest& request)
     if(!g_rpc_node->connman)
         throw JSONRPCError(RPC_CLIENT_P2P_DISABLED, "Error: Peer-to-peer functionality missing or disabled");
 
-    if (g_rpc_node->connman->GetNodeCount(CConnman::CONNECTIONS_ALL) == 0)
-        throw JSONRPCError(RPC_CLIENT_NOT_CONNECTED, PACKAGE_NAME " is not connected!");
+    // VERIBLOCK: when node does not have other peers, this disables certain RPCs. Disable this condition for now.
+    //  if (g_rpc_node->connman->GetNodeCount(CConnman::CONNECTIONS_ALL) == 0)
+    //      throw JSONRPCError(RPC_CLIENT_NOT_CONNECTED, PACKAGE_NAME " is not connected!");
 
     if (::ChainstateActive().IsInitialBlockDownload())
         throw JSONRPCError(RPC_CLIENT_IN_INITIAL_DOWNLOAD, PACKAGE_NAME " is in initial sync and waiting for blocks...");
@@ -615,6 +624,7 @@ static UniValue getblocktemplate(const JSONRPCRequest& request)
     aMutable.push_back("transactions");
     aMutable.push_back("prevblock");
 
+
     UniValue result(UniValue::VOBJ);
     result.pushKV("capabilities", aCaps);
 
@@ -702,6 +712,28 @@ static UniValue getblocktemplate(const JSONRPCRequest& request)
     if (!pblocktemplate->vchCoinbaseCommitment.empty()) {
         result.pushKV("default_witness_commitment", HexStr(pblocktemplate->vchCoinbaseCommitment.begin(), pblocktemplate->vchCoinbaseCommitment.end()));
     }
+
+    //VeriBlock Data
+    UniValue keystoneArray(UniValue::VARR);
+    VeriBlock::KeystoneArray keystones = VeriBlock::getKeystoneHashesForTheNextBlock(pindexPrev);
+    for (const auto& keystone : keystones) {
+        keystoneArray.push_back(keystone.GetHex());
+    }
+
+    CTxOut popCoinbaseCommitment = VeriBlock::addPopDataRootIntoCoinbaseCommitment(*pblock);
+
+    result.pushKV("keystone_hashes", keystoneArray);
+    result.pushKV("pop_witness_commitment", HexStr(popCoinbaseCommitment.scriptPubKey.begin(), popCoinbaseCommitment.scriptPubKey.end()));
+
+    UniValue popRewardsArray(UniValue::VARR);
+    VeriBlock::PoPRewards popRewards = VeriBlock::getPopRewards(*pindexPrev, Params().GetConsensus());
+    for (const auto& itr : popRewards) {
+        UniValue popRewardValue(UniValue::VOBJ);
+        popRewardValue.pushKV("payout_info", HexStr(itr.first.begin(), itr.first.end()));
+        popRewardValue.pushKV("amount", itr.second);
+        popRewardsArray.push_back(popRewardValue);
+    }
+    result.pushKV("pop_rewards", popRewardsArray);
 
     return result;
 }

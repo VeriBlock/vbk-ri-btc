@@ -1,4 +1,6 @@
 // Copyright (c) 2014-2019 The Bitcoin Core developers
+// Copyright (c) 2019-2020 Xenios SEZC
+// https://www.veriblock.org
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -16,7 +18,7 @@ BOOST_FIXTURE_TEST_SUITE(validation_tests, TestingSetup)
 static void TestBlockSubsidyHalvings(const Consensus::Params& consensusParams)
 {
     int maxHalvings = 64;
-    CAmount nInitialSubsidy = 50 * COIN;
+    CAmount nInitialSubsidy = VeriBlock::getCoinbaseSubsidy(50 * COIN);
 
     CAmount nPreviousSubsidy = nInitialSubsidy * 2; // for height == 0
     BOOST_CHECK_EQUAL(nPreviousSubsidy, nInitialSubsidy * 2);
@@ -55,7 +57,10 @@ BOOST_AUTO_TEST_CASE(subsidy_limit_test)
         nSum += nSubsidy * 1000;
         BOOST_CHECK(MoneyRange(nSum));
     }
-    BOOST_CHECK_EQUAL(nSum, CAmount{2099999997690000});
+    // with 50 vBTC payout:
+//    BOOST_CHECK_EQUAL(nSum, CAmount{2099999997690000});
+    // with 50*60% vBTC payout:
+    BOOST_CHECK_EQUAL(nSum, CAmount{1259999997480000});
 }
 
 static bool ReturnFalse() { return false; }

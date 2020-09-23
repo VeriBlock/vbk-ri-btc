@@ -1,15 +1,23 @@
 *.tar.gz
+.vscode
+
+vbtc_state_test
+src/vbk/grpc_integration/*.pb.cc
+src/vbk/grpc_integration/*.pb.h
 
 *.exe
 *.pdb
-src/bitcoin
-src/bitcoind
-src/bitcoin-cli
-src/bitcoin-tx
-src/bitcoin-wallet
+src/vbitcoin
+src/vbitcoind
+src/vbitcoin-cli
+src/vbitcoin-tx
+src/vbitcoin-wallet
 src/test/test_bitcoin
 src/test/test_bitcoin_fuzzy
 src/qt/test/test_bitcoin-qt
+
+# functional tests
+test/functional/temp
 
 # autoreconf
 Makefile.in
@@ -47,11 +55,11 @@ src/qt/forms/ui_*.h
 
 src/qt/test/moc*.cpp
 
-src/qt/bitcoin-qt.config
-src/qt/bitcoin-qt.creator
-src/qt/bitcoin-qt.creator.user
-src/qt/bitcoin-qt.files
-src/qt/bitcoin-qt.includes
+src/qt/vbitcoin-qt.config
+src/qt/vbitcoin-qt.creator
+src/qt/vbitcoin-qt.creator.user
+src/qt/vbitcoin-qt.files
+src/qt/vbitcoin-qt.includes
 
 .deps
 .dirstamp
@@ -88,8 +96,8 @@ src/qt/bitcoin-qt.includes
 *.qm
 Makefile
 !depends/Makefile
-bitcoin-qt
-Bitcoin-Qt.app
+vbitcoin-qt
+vBitcoin-Qt.app
 background.tiff*
 
 # Qt Creator
@@ -137,3 +145,14 @@ db4/
 osx_volname
 dist/
 *.background.tiff
+
+*.tmp
+compile_commands.json
+.idea
+.scannerwork
+.project
+.cproject
+.settings
+configure.lineno
+*.pb.*
+vbitcoin*

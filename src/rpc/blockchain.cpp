@@ -44,6 +44,9 @@
 #include <memory>
 #include <mutex>
 
+#include <vbk/adaptors/univalue_json.hpp>
+#include <vbk/pop_common.hpp>
+
 struct CUpdatedBlock
 {
     uint256 hash;
@@ -917,7 +920,21 @@ static UniValue getblock(const JSONRPCRequest& request)
         return strHex;
     }
 
-    return blockToJSON(block, tip, pblockindex, verbosity >= 2);
+    UniValue json = blockToJSON(block, tip, pblockindex, verbosity >= 2);
+
+    {
+        auto& pop = VeriBlock::GetPop();
+        LOCK(cs_main);
+        auto index = pop.altTree->getBlockIndex(block.GetHash().asVector());
+        VBK_ASSERT(index);
+        UniValue obj(UniValue::VOBJ);
+
+        obj.pushKV("state", altintegration::ToJSON<UniValue>(*index));
+        obj.pushKV("data", altintegration::ToJSON<UniValue>(block.popData, verbosity >= 2));
+        json.pushKV("pop", obj);
+    }
+
+    return json;
 }
 
 static UniValue pruneblockchain(const JSONRPCRequest& request)

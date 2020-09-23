@@ -1,10 +1,14 @@
 // Copyright (c) 2011-2019 The Bitcoin Core developers
+// Copyright (c) 2019-2020 Xenios SEZC
+// https://www.veriblock.org
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #if defined(HAVE_CONFIG_H)
 #include <config/bitcoin-config.h>
 #endif
+
+#include <node/context.h>
 
 #include <qt/bitcoin.h>
 #include <qt/bitcoingui.h>
@@ -510,6 +514,9 @@ int GuiMain(int argc, char* argv[])
 
     // Check for -chain, -testnet or -regtest parameter (Params() calls are only valid after this clause)
     try {
+        if(gArgs.GetChainName() == CBaseChainParams::MAIN) {
+            throw std::runtime_error("Mainnet is disabled. Use testnet.");
+        }
         node->selectParams(gArgs.GetChainName());
     } catch(std::exception &e) {
         node->initError(strprintf("%s\n", e.what()));

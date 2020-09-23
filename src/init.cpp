@@ -1,5 +1,7 @@
 // Copyright (c) 2009-2010 Satoshi Nakamoto
 // Copyright (c) 2009-2018 The Bitcoin Core developers
+// Copyright (c) 2019-2020 Xenios SEZC
+// https://www.veriblock.org
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -78,6 +80,9 @@
 #include <zmq/zmqrpc.h>
 #endif
 
+#include <vbk/log.hpp>
+#include <vbk/pop_service.hpp>
+
 static bool fFeeEstimatesInitialized = false;
 static const bool DEFAULT_PROXYRANDOMIZE = true;
 static const bool DEFAULT_REST_ENABLE = false;
@@ -101,7 +106,7 @@ static const char* FEE_ESTIMATES_FILENAME="fee_estimates.dat";
 /**
  * The PID file facilities.
  */
-static const char* BITCOIN_PID_FILENAME = "bitcoind.pid";
+static const char* BITCOIN_PID_FILENAME = "vbitcoind.pid";
 
 static fs::path GetPidFile()
 {
@@ -285,6 +290,7 @@ void Shutdown(NodeContext& node)
     globalVerifyHandle.reset();
     ECC_Stop();
     if (node.mempool) node.mempool = nullptr;
+
     LogPrintf("%s: done\n", __func__);
 }
 
@@ -354,6 +360,17 @@ void SetupServerArgs()
         "-dbcrashratio", "-forcecompactdb",
         // GUI args. These will be overwritten by SetupUIArgs for the GUI
         "-choosedatadir", "-lang=<lang>", "-min", "-resetguisettings", "-splash", "-uiplatform"};
+	// VBK
+    gArgs.AddArg("-bfiendpoint", "Default end point for BFI setup.", ArgsManager::ALLOW_STRING, OptionsCategory::OPTIONS);
+    gArgs.AddArg("-popautoconfig", "If false, enables pop{btc,vbk}{startheight,blocks} (default: true)", ArgsManager::ALLOW_BOOL, OptionsCategory::OPTIONS);
+    gArgs.AddArg("-popbtcstartheight", "If autoconfig is disabled, sets the first BTC bootstrap block height", ArgsManager::ALLOW_INT, OptionsCategory::OPTIONS);
+    gArgs.AddArg("-popbtcblocks", "If autoconfig is disabled, sets the blocks (must be comma separated list of 2014 BTC blocks)", ArgsManager::ALLOW_BOOL, OptionsCategory::OPTIONS);
+    gArgs.AddArg("-popvbkstartheight", "If autoconfig is disabled, sets the first VBK bootstrap block height", ArgsManager::ALLOW_BOOL, OptionsCategory::OPTIONS);
+    gArgs.AddArg("-popvbkblocks", "If autoconfig is disabled, sets the blocks (must be comma separated list of 100 VBK blocks)", ArgsManager::ALLOW_BOOL, OptionsCategory::OPTIONS);
+    gArgs.AddArg("-popbtcnetwork", "BTC network for pop mining: main/(test)/regtest", ArgsManager::ALLOW_STRING, OptionsCategory::OPTIONS);
+    gArgs.AddArg("-popvbknetwork", "VBK network for pop mining: main/(test)/alpha/regtest", ArgsManager::ALLOW_STRING, OptionsCategory::OPTIONS);
+    gArgs.AddArg("-poplogverbosity", "Verbosity for alt-cpp lib: debug/info/(warn)/error/off", ArgsManager::ALLOW_STRING, OptionsCategory::OPTIONS);
+    // VBK
 
     gArgs.AddArg("-version", "Print version and exit", ArgsManager::ALLOW_ANY, OptionsCategory::OPTIONS);
 #if HAVE_SYSTEM
@@ -552,10 +569,10 @@ void SetupServerArgs()
 
 std::string LicenseInfo()
 {
-    const std::string URL_SOURCE_CODE = "<https://github.com/bitcoin/bitcoin>";
-    const std::string URL_WEBSITE = "<https://bitcoincore.org>";
+    const std::string URL_SOURCE_CODE = "<https://github.com/VeriBlock/vbk-ri-btc>";
+    const std::string URL_WEBSITE = "<https://veriblock.org>";
 
-    return CopyrightHolders(strprintf(_("Copyright (C) %i-%i").translated, 2009, COPYRIGHT_YEAR) + " ") + "\n" +
+    return CopyrightHolders(strprintf(_("Copyright (C) %i-%i").translated, 2020, COPYRIGHT_YEAR) + " ") + "\n" +
            "\n" +
            strprintf(_("Please contribute if you find %s useful. "
                        "Visit %s for further information about the software.").translated,
@@ -830,6 +847,11 @@ void InitLogging()
     LogInstance().m_log_timestamps = gArgs.GetBoolArg("-logtimestamps", DEFAULT_LOGTIMESTAMPS);
     LogInstance().m_log_time_micros = gArgs.GetBoolArg("-logtimemicros", DEFAULT_LOGTIMEMICROS);
     LogInstance().m_log_threadnames = gArgs.GetBoolArg("-logthreadnames", DEFAULT_LOGTHREADNAMES);
+    LogInstance().EnableCategory(BCLog::POP);
+
+    std::string poplogverbosity = gArgs.GetArg("-poplogverbosity", "warn");
+    altintegration::SetLogger<VeriBlock::VBTCLogger>();
+    altintegration::GetLogger().level = altintegration::StringToLevel(poplogverbosity);
 
     fLogIPs = gArgs.GetBoolArg("-logips", DEFAULT_LOGIPS);
 
@@ -880,6 +902,7 @@ bool AppInitBasicSetup()
     // Enable Data Execution Prevention (DEP)
     SetProcessDEPPolicy(PROCESS_DEP_ENABLE);
 #endif
+
 
     if (!SetupNetworking())
         return InitError("Initializing networking failed");
@@ -1185,6 +1208,7 @@ bool AppInitLockDataDirectory()
 bool AppInitMain(NodeContext& node)
 {
     const CChainParams& chainparams = Params();
+
     // ********************************************************* Step 4a: application initialization
     if (!CreatePidFile()) {
         // Detailed error printed inside CreatePidFile().
@@ -1473,6 +1497,7 @@ bool AppInitMain(NodeContext& node)
                 // fails if it's still open from the previous loop. Close it first:
                 pblocktree.reset();
                 pblocktree.reset(new CBlockTreeDB(nBlockTreeDBCache, false, fReset));
+                VeriBlock::SetPop(*pblocktree);
 
                 if (fReset) {
                     pblocktree->WriteReindexing(true);
@@ -1822,6 +1847,21 @@ bool AppInitMain(NodeContext& node)
     scheduler.scheduleEvery([banman]{
         banman->DumpBanlist();
     }, DUMP_BANS_INTERVAL * 1000);
+
+    {
+        auto& pop = VeriBlock::GetPop();
+        auto* tip = ChainActive().Tip();
+        altintegration::ValidationState state;
+        LOCK(cs_main);
+        bool ret = VeriBlock::setState(tip->GetBlockHash(), state);
+        auto* alttip = pop.altTree->getBestChain().tip();
+        assert(ret && "bad state");
+        assert(tip->nHeight == alttip->getHeight());
+
+        LogPrintf("ALT tree best height = %d\n", pop.altTree->getBestChain().tip()->getHeight());
+        LogPrintf("VBK tree best height = %d\n", pop.altTree->vbk().getBestChain().tip()->getHeight());
+        LogPrintf("BTC tree best height = %d\n", pop.altTree->btc().getBestChain().tip()->getHeight());
+    }
 
     return true;
 }
