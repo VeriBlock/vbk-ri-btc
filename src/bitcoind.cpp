@@ -1,5 +1,7 @@
 // Copyright (c) 2009-2010 Satoshi Nakamoto
 // Copyright (c) 2009-2019 The Bitcoin Core developers
+// Copyright (c) 2019-2020 Xenios SEZC
+// https://www.veriblock.org
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -22,6 +24,7 @@
 #include <util/translation.h>
 
 #include <functional>
+#include <vbk/params.hpp>
 
 const std::function<std::string(const char*)> G_TRANSLATION_FUN = nullptr;
 
@@ -42,6 +45,7 @@ static bool AppInit(int argc, char* argv[])
 {
     NodeContext node;
     node.chain = interfaces::MakeChain(node);
+
 
     bool fRet = false;
 
@@ -67,7 +71,7 @@ static bool AppInit(int argc, char* argv[])
         }
         else
         {
-            strUsage += "\nUsage:  bitcoind [options]                     Start " PACKAGE_NAME "\n";
+            strUsage += "\nUsage:  vbitcoind [options]                     Start " PACKAGE_NAME "\n";
             strUsage += "\n" + gArgs.GetHelpMessage();
         }
 
@@ -85,7 +89,11 @@ static bool AppInit(int argc, char* argv[])
         }
         // Check for -chain, -testnet or -regtest parameter (Params() calls are only valid after this clause)
         try {
+            if(gArgs.GetChainName() == CBaseChainParams::MAIN) {
+                throw std::runtime_error("Mainnet is disabled. Use testnet.");
+            }
             SelectParams(gArgs.GetChainName());
+            VeriBlock::selectPopConfig(gArgs, gArgs.GetChainName(), gArgs.GetChainName());
         } catch (const std::exception& e) {
             return InitError(strprintf("%s\n", e.what()));
         }
@@ -93,7 +101,7 @@ static bool AppInit(int argc, char* argv[])
         // Error out when loose non-argument tokens are encountered on command line
         for (int i = 1; i < argc; i++) {
             if (!IsSwitchChar(argv[i][0])) {
-                return InitError(strprintf("Command line contains unexpected token '%s', see bitcoind -h for a list of options.\n", argv[i]));
+                return InitError(strprintf("Command line contains unexpected token '%s', see vbitcoind -h for a list of options.\n", argv[i]));
             }
         }
 
@@ -102,6 +110,7 @@ static bool AppInit(int argc, char* argv[])
         // Set this early so that parameter interactions go to console
         InitLogging();
         InitParameterInteraction();
+
         if (!AppInitBasicSetup())
         {
             // InitError will have been called with detailed error, which ends up on console
